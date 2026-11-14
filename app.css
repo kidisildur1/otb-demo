@@ -24,3 +24,5 @@
 
 /* Let detail grid children shrink; wide tables scroll inside their own region. */
 .detail-grid > div, .detail-grid > aside { min-width: 0; }
+
+.page-heading>div:first-child,.card-body,.grid-main>*,.form-layout>*{min-width:0}.heading-actions{flex-wrap:wrap;max-width:50%}.page-heading h1{overflow-wrap:anywhere}.stage{scroll-margin-top:20px}.detail-meta dd,.information{overflow-wrap:anywhere}.sidebar-note{margin-top:auto}@media(max-width:760px){.page-heading{display:block}.page-heading>div:first-child{width:100%}.page-heading .heading-actions{max-width:none;width:100%;margin-top:15px;flex-direction:row}.heading-actions .button{white-space:normal}.stage-head{flex-wrap:wrap}.form-layout>*{min-width:0}.sidebar-note{margin-top:25px}}

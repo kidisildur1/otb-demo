@@ -111,6 +111,85 @@
       {id: 12, workId: 8, title: "Собрать предложения по измерительному стенду", assignee: "Инженер-исследователь", reviewer: "Координатор поручения", dueDate: "2026-11-17", status: "todo", result: ""}
     ]
   };
+  // Version 2 examples are authored here, never exported from a working database.
+  // Only a fresh demo/reset receives these dated examples. The model migrates old
+  // browser copies without assigning new facts or dates to visitors' own works.
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2,"0");
+  const selectedPeriod = currentYear + "-" + currentMonth;
+  const previous = new Date(currentYear, now.getMonth() - 1, 1);
+  const previousPeriod = previous.getFullYear() + "-" + String(previous.getMonth() + 1).padStart(2,"0");
+  function endOfMonth(value) {
+    const year=Number(value.slice(0,4)),month=Number(value.slice(5));
+    return value + "-" + String(new Date(year,month,0).getDate()).padStart(2,"0");
+  }
+  function shift(value) { return value.replace(/^(2026|2027)-/,(_,year)=>(currentYear+Number(year)-2026)+"-"); }
+  data.schemaVersion = 2;
+  data.today = selectedPeriod + "-" + String(now.getDate()).padStart(2,"0");
+  data.works.forEach(function(work,index) {
+    work.code=work.code.replace("2026",String(currentYear));
+    work.dueDate=shift(work.dueDate);
+    work.customer=work.kind==="nir"?"Учебный заказчик "+String.fromCharCode(1040+index):"";
+    work.startDate=work.kind==="nir"?(currentYear-1)+"-01-01":null;
+    work.externalBudget=null;
+    work.relatedNirId=work.kind==="publication"?(work.id===5?2:1):null;
+    work.demoSource="";
+    work.participations=[{labId:work.labId,revenueShare:100}];
+    work.contributions=[];
+    work.stages.forEach(function(stage) {
+      stage.dueDate=shift(stage.dueDate);
+      stage.startDate=null;stage.amountGross=null;stage.externalBudget=null;
+      stage.forecastDate=null;stage.acceptedDate=null;
+    });
+  });
+  data.tasks.forEach(task=>{task.dueDate=shift(task.dueDate);});
+  const first=data.works[0];
+  first.dueDate=currentYear+"-12-20";
+  first.externalBudget=200000;
+  first.stages[0].dueDate=endOfMonth(previousPeriod);
+  first.stages[0].acceptedDate=endOfMonth(previousPeriod);
+  first.stages[1].dueDate=currentYear+"-12-15";
+  first.stages[1].forecastDate=currentYear+"-12-18";
+  first.stages.forEach(stage=>{stage.amountGross=2880000;stage.externalBudget=100000;});
+  const joint=data.works[1];
+  joint.dueDate=currentYear+"-12-25";
+  joint.participations=[{labId:1,revenueShare:60},{labId:3,revenueShare:40}];
+  joint.stages[0].dueDate=currentYear+"-12-23";
+  joint.stages[0].forecastDate=currentYear+"-12-27";
+  joint.stages[0].amountGross=3840000;
+  joint.contributions=[{id:1,title:"Экспериментальная проверка режима",labId:3,assignee:"Соисполнитель лаборатории",stageId:3,
+    proposedAmount:450000,approvedAmount:null,status:"pending",confirmedBy:"",confirmedAt:null,revision:0,history:[]}];
+  const future=data.works[2];
+  future.dueDate=(currentYear+1)+"-03-31";
+  future.stages=[
+    {id:5,title:"Программа опытной серии",status:"planned",dueDate:(currentYear+1)+"-01-31",criteria:"Согласована программа и перечень измерений.",startDate:(currentYear+1)+"-01-10",amountGross:2100000,externalBudget:null,forecastDate:null,acceptedDate:null},
+    {id:6,title:"Испытания и рекомендации",status:"planned",dueDate:(currentYear+1)+"-03-31",criteria:"Проверен отчёт и рекомендации.",startDate:(currentYear+1)+"-02-01",amountGross:2100000,externalBudget:null,forecastDate:null,acceptedDate:null}
+  ];
+  data.works[3].stages[0].amountGross=2160000;
+  data.monthlyEntries=[];
+  function entry(workId,kind,amount,labId,period,confirmed=true) {
+    data.monthlyEntries.push({id:data.monthlyEntries.length+1,workId,labId,kind,period,amount,confirmed,source:"Учебная помесячная запись; реальные документы не используются"});
+  }
+  entry(1,"revenue",1400000,null,previousPeriod); entry(1,"revenue",1000000,null,selectedPeriod);
+  entry(1,"cost",1000000,3,previousPeriod); entry(1,"cost",600000,3,selectedPeriod);
+  entry(1,"payment",900000,null,previousPeriod); entry(1,"payment",540000,null,selectedPeriod);
+  entry(2,"revenue",1600000,null,previousPeriod);
+  entry(2,"cost",900000,1,previousPeriod); entry(2,"cost",350000,3,previousPeriod);
+  entry(2,"cost",200000,1,selectedPeriod); entry(2,"cost",100000,3,selectedPeriod);
+  entry(2,"payment",960000,null,previousPeriod);
+  entry(4,"revenue",1000000,null,previousPeriod); entry(4,"revenue",800000,null,selectedPeriod);
+  entry(4,"cost",1000000,2,previousPeriod); entry(4,"cost",920000,2,selectedPeriod);
+  entry(4,"payment",1080000,null,previousPeriod);
+  data.months=[];
+  for(const period of [previousPeriod,selectedPeriod]) {
+    for(const lab of data.labs) {
+      const known=lab.id!==4;
+      data.months.push({labId:lab.id,period,headcount:known?({1:8,2:6,3:10}[lab.id]):null,
+        source:known?"Учебный список состава лаборатории на конец месяца":"",asOf:known?endOfMonth(period):null,
+        revenueComplete:known,costComplete:known,confirmed:known,revision:0});
+    }
+  }
   function freeze(value) {
     Object.keys(value).forEach(function (key) {
       if (value[key] && typeof value[key] === "object") freeze(value[key]);
