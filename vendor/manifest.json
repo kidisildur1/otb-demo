@@ -922,8 +922,8 @@
       },
       {
         "path": "vendor/pdfjs/build/pdf.worker.min.mjs",
-        "sha256": "ba9af6d451ec1514225ad550ac99d60d6916beae763890640359414b57ef277f",
-        "bytes": 1232495,
+        "sha256": "e6af88ae80c29ab73a6afdf368eaa881411d384a19657a41827d48c0a977d5dd",
+        "bytes": 1232464,
         "originalSha256": "52fadd5b81b6abd1eb665bab0c3749a8ad6a293fcb6ee9d9e0309f29d4f82619"
       },
       {
@@ -1013,8 +1013,8 @@
       },
       {
         "path": "vendor/pdfjs/OTB-PATCH.md",
-        "sha256": "b5af64a53b072b92c74a2aef0115cf6857a9c5f812b64f9f8b5fc7d2069f7e4b",
-        "bytes": 1084
+        "sha256": "fcefdaa6ce74835e778d41b15069d71f0608869c390e9e5fd2289f35f6b95eae",
+        "bytes": 1075
       }
     ],
     "localModifications": [
