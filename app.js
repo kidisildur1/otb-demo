@@ -79,12 +79,14 @@
     const editMatch = route.path.match(/^\/works\/(\d+)\/edit$/);
     const contributionMatch = route.path.match(/^\/works\/(\d+)\/contributions\/(new|\d+)$/);
     const monthMatch = route.path.match(/^\/months\/(\d+)$/);
+    const contractMatch = route.path.match(/^\/works\/(\d+)\/contract(\/edit)?$/);
     if (route.path === '/') {content = renderOverview(); nav='overview'; title='Обзор отдела';}
     else if (route.path === '/works') {content=renderWorks(); nav=route.params.get('kind') || ''; title=kinds[nav] || 'Все работы';}
-    else if (route.path === '/works/new') {nav=Object.hasOwn(kinds,route.params.get('kind'))?route.params.get('kind'):'nir'; content=window.OTBCards.renderEditor(context(),null,nav,route.params.get('sample')==='1'); title='Новая учебная работа';}
-    else if (editMatch && workFor(editMatch[1])) {const work=workFor(editMatch[1]);content=window.OTBCards.renderEditor(context(),work,work.kind);nav=work.kind;title='Изменить карточку';}
+    else if (route.path === '/works/new') {nav=Object.hasOwn(kinds,route.params.get('kind'))?route.params.get('kind'):'nir'; content=nav==='nir'&&route.params.get('sample')==='1'?window.OTBContracts.renderReview(context()):window.OTBCards.renderEditor(context(),null,nav); title='Новая учебная работа';}
+    else if (editMatch && workFor(editMatch[1])) {const work=workFor(editMatch[1]);content=work.contract?window.OTBContracts.renderReview(context(),work):window.OTBCards.renderEditor(context(),work,work.kind);nav=work.kind;title='Изменить карточку';}
     else if (contributionMatch && workFor(contributionMatch[1])?.kind==='nir') {content=window.OTBCards.renderContribution(context(),workFor(contributionMatch[1]),contributionMatch[2]==='new'?null:Number(contributionMatch[2]));nav='nir';title='Соисполнение лабораторий';}
-    else if (route.path === '/contract-example') {content=window.OTBCards.renderImport(context());nav='nir';title='Пример импорта договора';}
+    else if (contractMatch && workFor(contractMatch[1])?.contract) {const work=workFor(contractMatch[1]);content=contractMatch[2]?window.OTBContracts.renderReview(context(),work):window.OTBContracts.renderDetails(context(),work);nav='contracts';title='Карточка договора';}
+    else if (route.path === '/contract-example') {content=window.OTBContracts.renderExample(context());nav='contracts';title='Договор · учебный пример';}
     else if (route.path === '/calendar') {content=window.OTBReports.renderCalendar(context());nav='calendar';title='Календарь этапов';}
     else if (route.path === '/indicators') {content=window.OTBReports.renderIndicators(context());nav='indicators';title='Показатели';}
     else if (monthMatch) {content=window.OTBReports.renderMonth(context(),Number(monthMatch[1]),route.params.get('month'));nav='indicators';title='Сведения месяца';}
@@ -125,7 +127,7 @@
   function renderWorks() {
     const kind=Object.hasOwn(kinds,route.params.get('kind'))?route.params.get('kind'):'',query=route.params.get('q')||'',lab=route.params.get('lab')||'',status=route.params.get('status')||'';
     const matches=state.works.filter(work=>(!kind||work.kind===kind)&&(!lab||workInLab(work,lab))&&(!status||(status==='open'?work.status!=='closed':work.status===status))&&(!query||[work.code,work.title,work.owner,work.customer||''].join(' ').toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru')))).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
-    return pageHead(kinds[kind]||'Все работы',kind?'Сроки, участники и результаты выбранного раздела.':'Общий реестр учебных работ. Выберите раздел в меню.',button({nir:'Новая НИР',publication:'Новая публикация',rid:'Новый РИД',assignment:'Новое поручение'}[kind]||'Новая НИР',queryLink('/works/new',{kind:kind||'nir'}),'plus')+(kind==='nir'?button('Пример импорта PDF','#/contract-example','',true):''),'','Реестр работ')+`<section class="card">${kind?'':`<div class="filter-tabs">${[['','Все работы'],...Object.entries(kinds)].map(([value,label])=>`<a href="${queryLink('/works',{kind:value})}" class="${kind===value?'active':''}">${esc(label)}<span class="count">${state.works.filter(work=>!value||work.kind===value).length}</span></a>`).join('')}</div>`}<form class="filters" data-form="work-filter"><input type="hidden" name="kind" value="${esc(kind)}"><label class="search-field"><span class="sr-only">Найти работу</span>${icon('search')}<input type="search" name="q" value="${esc(query)}" maxlength="200" placeholder="Название, код, заказчик или ответственный"></label><label class="sr-only" for="filter-lab">Лаборатория</label><select name="lab" id="filter-lab"><option value="">Все лаборатории</option>${state.labs.map(item=>`<option value="${item.id}"${String(item.id)===lab?' selected':''}>${esc(item.shortName)}</option>`).join('')}</select><label class="sr-only" for="filter-status">Статус</label><select name="status" id="filter-status"><option value="">Все статусы</option>${options({open:'Все незакрытые',...workStatuses},status)}</select><button class="button secondary" type="submit">Найти</button>${query||lab||status?`<a class="button ghost" href="${queryLink('/works',{kind})}">Сбросить фильтры</a>`:''}</form>${workTable(matches)}<div class="table-footer"><span>Найдено работ: ${matches.length}</span><span>Демонстрационные данные</span></div></section>`;
+    return pageHead(kinds[kind]||'Все работы',kind?'Сроки, участники и результаты выбранного раздела.':'Общий реестр учебных работ. Выберите раздел в меню.',button({nir:'Новая НИР',publication:'Новая публикация',rid:'Новый РИД',assignment:'Новое поручение'}[kind]||'Новая НИР',queryLink('/works/new',{kind:kind||'nir'}),'plus')+(kind==='nir'?button('Карточка договора · пример','#/contract-example','',true):''),'','Реестр работ')+`<section class="card">${kind?'':`<div class="filter-tabs">${[['','Все работы'],...Object.entries(kinds)].map(([value,label])=>`<a href="${queryLink('/works',{kind:value})}" class="${kind===value?'active':''}">${esc(label)}<span class="count">${state.works.filter(work=>!value||work.kind===value).length}</span></a>`).join('')}</div>`}<form class="filters" data-form="work-filter"><input type="hidden" name="kind" value="${esc(kind)}"><label class="search-field"><span class="sr-only">Найти работу</span>${icon('search')}<input type="search" name="q" value="${esc(query)}" maxlength="200" placeholder="Название, код, заказчик или ответственный"></label><label class="sr-only" for="filter-lab">Лаборатория</label><select name="lab" id="filter-lab"><option value="">Все лаборатории</option>${state.labs.map(item=>`<option value="${item.id}"${String(item.id)===lab?' selected':''}>${esc(item.shortName)}</option>`).join('')}</select><label class="sr-only" for="filter-status">Статус</label><select name="status" id="filter-status"><option value="">Все статусы</option>${options({open:'Все незакрытые',...workStatuses},status)}</select><button class="button secondary" type="submit">Найти</button>${query||lab||status?`<a class="button ghost" href="${queryLink('/works',{kind})}">Сбросить фильтры</a>`:''}</form>${workTable(matches)}<div class="table-footer"><span>Найдено работ: ${matches.length}</span><span>Демонстрационные данные</span></div></section>`;
   }
 
   function historyMarkup(work) {
@@ -182,7 +184,7 @@
   function renderGuide() {
     const steps=[
       ['01 · НИР и публикации','Создайте НИР с этапами','Разделы имеют собственные формы. В НИР заполните заказчика, сроки, стоимость договора и этапов. Количество этапов должно совпадать со строками; сумма известных этапов не может превышать договор. Публикация остаётся отдельной записью и может быть связана с НИР.','Новая НИР','#/works/new?kind=nir'],
-      ['02 · Договор','Посмотрите пример импорта','В этой версии показан подготовленный учебный договор и проверка его полей перед созданием НИР. Файлы PDF здесь не загружаются и не распознаются. Настоящее распознавание текста и сканов выполняется в локальном приложении.','Пример импорта','#/contract-example'],
+      ['02 · Договор','Откройте новую карточку договора','Посмотрите реквизиты сторон, три этапа, график платежей и условия приёмки. Проверьте и исправьте учебные поля, затем сохраните связанную НИР. Файлы PDF здесь не загружаются и не распознаются.','Договор · учебный пример','#/contract-example'],
       ['03 · Соисполнение','Согласуйте смету лаборатории','В карточке НИР добавьте вклад другой лаборатории. В учебном сценарии стоимость подтверждает её заведующий или заместитель. Обычный сотрудник её не подтверждает. Изменение суммы требует нового решения; история остаётся в вашей копии.','Совместная НИР','#/works/2'],
       ['04 · План этапов','Сравните даты по месяцам','Календарь показывает текущий и следующий год. Плановый срок, прогноз завершения и фактическая приёмка выбираются отдельно. Неизвестные даты не заменяются плановыми.','Календарь этапов','#/calendar'],
       ['05 · Экономика месяца','Проверьте выработку на человека','Показатели используют отдельные подтверждённые записи месяца. Выработка = выручка лаборатории / численность. Сведения о численности сохраняются и учебно подтверждаются отдельным действием. При неизвестной или нулевой численности деление не выполняется.','Показатели','#/indicators'],
@@ -220,7 +222,7 @@
   document.addEventListener('submit',event=>{
     const form=event.target.closest('form[data-form]');if(!form)return;event.preventDefault();
     try {
-      if(window.OTBCards.handleSubmit(context(),form)||window.OTBReports.handleSubmit(context(),form))return;
+      if(window.OTBContracts.handleSubmit(context(),form)||window.OTBCards.handleSubmit(context(),form)||window.OTBReports.handleSubmit(context(),form))return;
       const data=new FormData(form),type=form.dataset.form;
       if(type==='work-filter'||type==='task-filter') {location.hash=queryLink(type==='work-filter'?'/works':'/tasks',Object.fromEntries([...data.entries()].map(([key,value])=>[key,String(value).trim()])));return;}
       if(type==='forecast') {
@@ -251,7 +253,7 @@
     const control=event.target.closest('[data-action]');if(!control)return;
     const action=control.dataset.action;
     try {
-      if(window.OTBCards.handleClick(context(),control,event))return;
+      if(window.OTBContracts.handleClick(context(),control,event)||window.OTBCards.handleClick(context(),control,event))return;
       if(action==='dismiss-message'){message=null;showNotices();return;}
       if(action==='close-dialog'){closeDialog();return;}
       if(action==='jump-economy'){$('#economy')?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});return;}

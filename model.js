@@ -97,6 +97,48 @@
       return {at: timestamp(event.at), action: text(event.action, 180), detail: text(event.detail, 5000, true)};
     });
   }
+  // A contract is editable source data, never a confirmed economic entry.
+  const VAT_BASIS = ["included", "excluded", "exempt", "unknown"];
+  function optionalText(value, maximum) { return optional(value, item=>text(item, maximum, true), ""); }
+  function percentage(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100 || Math.round(value * 10000) / 10000 !== value) fail();
+    return value === 0 ? 0 : value;
+  }
+  function partyDetails(input) {
+    const item = input === undefined || input === null ? {} : record(input);
+    return {name:optionalText(item.name,400),inn:optionalText(item.inn,80),kpp:optionalText(item.kpp,80),
+      ogrn:optionalText(item.ogrn,80),address:optionalText(item.address,2000),bank:optionalText(item.bank,400),
+      account:optionalText(item.account,100),correspondentAccount:optionalText(item.correspondentAccount,100),
+      bik:optionalText(item.bik,100),raw:optionalText(item.raw,12000)};
+  }
+  function contractDetails(input) {
+    if (input === undefined || input === null) return null;
+    const item = record(input);
+    const result = {number:optionalText(item.number,120),date:optional(item.date,date),title:optionalText(item.title,1000),
+      subject:optionalText(item.subject,12000),customer:optionalText(item.customer,400),executor:optionalText(item.executor,400),
+      currency:optionalText(item.currency,8),amount:optional(item.amount,money),
+      vatBasis:optional(item.vatBasis,value=>choice(value,VAT_BASIS),"unknown"),
+      vatRate:optional(item.vatRate,percentage),vatAmount:optional(item.vatAmount,money),priceTerms:optionalText(item.priceTerms,6000),
+      startDate:optional(item.startDate,date),dueDate:optional(item.dueDate,date),validUntil:optional(item.validUntil,date),
+      workTerm:optionalText(item.workTerm,6000),validityTerm:optionalText(item.validityTerm,6000),acceptanceTerms:optionalText(item.acceptanceTerms,16000),
+      customerDetails:partyDetails(item.customerDetails),executorDetails:partyDetails(item.executorDetails),
+      payments:list(item.payments === undefined ? [] : item.payments,200).map(function(value) {
+        const payment=record(value);
+        return {number:optionalText(payment.number,32),title:optionalText(payment.title,500),amount:optional(payment.amount,money),
+          percent:optional(payment.percent,percentage),currency:optionalText(payment.currency,8),
+          vatBasis:optional(payment.vatBasis,value=>choice(value,VAT_BASIS),"unknown"),dueDate:optional(payment.dueDate,date),
+          condition:optionalText(payment.condition,8000),stageNumber:optionalText(payment.stageNumber,32)};
+      }),
+      evidence:list(item.evidence === undefined ? [] : item.evidence,1000).map(function(value) {
+        const source=record(value);
+        return {field:text(source.field,180),page:id(source.page),text:text(source.text,6000)};
+      }),
+      reviewedAt:optional(item.reviewedAt,timestamp),reviewNotes:optionalText(item.reviewNotes,6000)};
+    if (result.startDate && result.dueDate && result.startDate > result.dueDate) fail();
+    if (result.date && result.validUntil && result.validUntil < result.date) fail();
+    if (result.evidence.some(source=>source.page>1000)) fail();
+    return result;
+  }
   function normalize(input) {
     const state = record(input);
     if (![1,2].includes(state.schemaVersion)) fail();
@@ -125,7 +167,12 @@
           amountGross: legacy ? null : optional(stage.amountGross, money),
           externalBudget: legacy ? null : optional(stage.externalBudget, money),
           forecastDate: legacy ? null : optional(stage.forecastDate, date),
-          acceptedDate: legacy ? null : optional(stage.acceptedDate, date)};
+          acceptedDate: legacy ? null : optional(stage.acceptedDate, date),
+          sourceNumber:legacy ? "" : optionalText(stage.sourceNumber,32),
+          content:legacy ? "" : optionalText(stage.content,12000),
+          expectedResult:legacy ? "" : optionalText(stage.expectedResult,12000),
+          startCondition:legacy ? "" : optionalText(stage.startCondition,6000),
+          endCondition:legacy ? "" : optionalText(stage.endCondition,6000)};
         if (result.startDate && result.startDate > result.dueDate) fail();
         if (startDate && (result.dueDate < startDate || (result.startDate && result.startDate < startDate))) fail();
         if (!legacy && result.dueDate > dueDate) fail();
@@ -168,14 +215,14 @@
         customer:legacy ? "" : optional(work.customer,value=>text(value,180,true),""),
         externalBudget:legacy ? null : optional(work.externalBudget,money),
         relatedNirId:legacy ? null : optional(work.relatedNirId,id),
-        demoSource:legacy ? "" : optional(work.demoSource,value=>choice(value,["","contract-example-v1"]),""),
+        demoSource:legacy ? "" : optional(work.demoSource,value=>choice(value,["","contract-example-v1","contract-example-v2"]),""),
         description:text(work.description,10000,true),criteria:text(work.criteria,10000,true),
-        contractGross:money(work.contractGross),minReturn:work.minReturn,
+        contractGross:money(work.contractGross),contract:legacy ? null : contractDetails(work.contract),minReturn:work.minReturn,
         forecast:{revenueRemaining:money(forecast.revenueRemaining),costRemaining:money(forecast.costRemaining),complete:forecast.complete},
         facts:{revenue:money(facts.revenue),cost:money(facts.cost),payment:money(facts.payment)},
         stages,history:history(work.history),participations,contributions
       };
-      if (result.kind !== "nir" && (result.contributions.length || result.demoSource)) fail();
+      if (result.kind !== "nir" && (result.contributions.length || result.demoSource || result.contract !== null)) fail();
       for (const [stageField,workField] of [["amountGross","contractGross"],["externalBudget","externalBudget"]]) {
         const values=stages.map(stage=>stage[stageField]);
         const known=values.reduce((sum,value)=>sum+(value === null ? 0 : Math.round(value*100)),0);
