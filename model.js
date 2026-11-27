@@ -111,6 +111,20 @@
       account:optionalText(item.account,100),correspondentAccount:optionalText(item.correspondentAccount,100),
       bik:optionalText(item.bik,100),raw:optionalText(item.raw,12000)};
   }
+  function importSource(input) {
+    if (input === undefined || input === null) return null;
+    const item=record(input), hash=text(item.sha256,64);
+    if (!/^[a-f0-9]{64}$/i.test(hash)) fail();
+    const result={sha256:hash.toLowerCase(),fileName:text(item.fileName,255),size:integer(item.size,1073741824),
+      pageCount:integer(item.pageCount,1000),complete:boolean(item.complete),method:choice(item.method,["browser-pdf"]),
+      pageStatus:list(item.pageStatus === undefined ? [] : item.pageStatus,1000).map(value=>{
+        const page=record(value);return {page:id(page.page),status:choice(page.status,["text","ocr","unreadable","error","partial","unprocessed","skipped","cancelled"]),message:optionalText(page.message,1000)};
+      })};
+    if (!result.pageCount || result.pageStatus.some(p=>p.page>result.pageCount)) fail();
+    unique(result.pageStatus.map(p=>p.page));
+    return result;
+  }
+  function importMessages(input) { return list(input === undefined ? [] : input,1000).map(value=>text(value,2000,true)); }
   function contractDetails(input) {
     if (input === undefined || input === null) return null;
     const item = record(input);
@@ -133,7 +147,8 @@
         const source=record(value);
         return {field:text(source.field,180),page:id(source.page),text:text(source.text,6000)};
       }),
-      reviewedAt:optional(item.reviewedAt,timestamp),reviewNotes:optionalText(item.reviewNotes,6000)};
+      reviewedAt:optional(item.reviewedAt,timestamp),reviewNotes:optionalText(item.reviewNotes,6000),
+      importSource:importSource(item.importSource),importWarnings:importMessages(item.importWarnings),importMissing:importMessages(item.importMissing),importConflicts:importMessages(item.importConflicts)};
     if (result.startDate && result.dueDate && result.startDate > result.dueDate) fail();
     if (result.date && result.validUntil && result.validUntil < result.date) fail();
     if (result.evidence.some(source=>source.page>1000)) fail();
@@ -156,12 +171,13 @@
           typeof work.minReturn !== "number" || !Number.isFinite(work.minReturn) ||
           work.minReturn < 0 || work.minReturn > 1000000) fail();
       const startDate = legacy ? null : optional(work.startDate, date);
-      const dueDate = date(work.dueDate);
-      if (startDate && startDate > dueDate) fail();
+      const imported = !legacy && work.kind === "nir" && Boolean(work.contract && work.contract.importSource);
+      const dueDate = imported ? optional(work.dueDate,date) : date(work.dueDate);
+      if (startDate && dueDate && startDate > dueDate) fail();
       const stages = list(work.stages, 100).map(function (item) {
         const stage = record(item);
         const result = {id: id(stage.id), title: text(stage.title, 250),
-          status: choice(stage.status, STAGE_STATUS), dueDate: date(stage.dueDate),
+          status: choice(stage.status, STAGE_STATUS), dueDate: imported ? optional(stage.dueDate,date) : date(stage.dueDate),
           criteria: text(stage.criteria, 10000, true),
           startDate: legacy ? null : optional(stage.startDate, date),
           amountGross: legacy ? null : optional(stage.amountGross, money),
@@ -172,12 +188,18 @@
           content:legacy ? "" : optionalText(stage.content,12000),
           expectedResult:legacy ? "" : optionalText(stage.expectedResult,12000),
           startCondition:legacy ? "" : optionalText(stage.startCondition,6000),
-          endCondition:legacy ? "" : optionalText(stage.endCondition,6000)};
-        if (result.startDate && result.startDate > result.dueDate) fail();
-        if (startDate && (result.dueDate < startDate || (result.startDate && result.startDate < startDate))) fail();
-        if (!legacy && result.dueDate > dueDate) fail();
+          endCondition:legacy ? "" : optionalText(stage.endCondition,6000),
+          amount:legacy ? null : optional(stage.amount,money),currency:legacy ? "" : optionalText(stage.currency,8),
+          vatBasis:legacy ? "unknown" : optional(stage.vatBasis,value=>choice(value,VAT_BASIS),"unknown")};
+        if (result.startDate && result.dueDate && result.startDate > result.dueDate) fail();
+        if (startDate && ((result.dueDate && result.dueDate < startDate) || (result.startDate && result.startDate < startDate))) fail();
+        if (!legacy && dueDate && result.dueDate && result.dueDate > dueDate) fail();
         if (result.startDate && result.forecastDate && result.forecastDate < result.startDate) fail();
         if (result.acceptedDate && result.status !== "accepted") fail();
+        if (imported) {
+          const gross = result.currency === "RUB" && ["included","exempt"].includes(result.vatBasis) ? result.amount : null;
+          if (result.amountGross !== gross) fail();
+        }
         return result;
       });
       unique(stages.map(stage => stage.id));
@@ -223,7 +245,13 @@
         stages,history:history(work.history),participations,contributions
       };
       if (result.kind !== "nir" && (result.contributions.length || result.demoSource || result.contract !== null)) fail();
+      if (result.contract?.importSource) {
+        const contract=result.contract;
+        const gross=contract.currency === "RUB" && ["included","exempt"].includes(contract.vatBasis) ? contract.amount : null;
+        if (result.contractGross !== gross) fail();
+      }
       for (const [stageField,workField] of [["amountGross","contractGross"],["externalBudget","externalBudget"]]) {
+        if (stageField === "amountGross" && result.contract?.importSource) continue;
         const values=stages.map(stage=>stage[stageField]);
         const known=values.reduce((sum,value)=>sum+(value === null ? 0 : Math.round(value*100)),0);
         if (!Number.isSafeInteger(known)) fail();
