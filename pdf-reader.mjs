@@ -67,12 +67,12 @@ export async function readPDF(file,{onProgress=()=>{},signal,forceOCR=false}={})
   let loadingTask,doc,ocr,ocrPending=null,stopped=false;
   const stop=()=>{stopped=true;try{loadingTask?.destroy().catch(()=>{});}catch{}try{ocr?.terminate().catch(()=>{});}catch{}};
   signal?.addEventListener('abort',stop,{once:true});
-  const pages=[], warnings=[]; const started=Date.now();
+  const pages=[], warnings=[]; const started=Date.now(); let ocrPage=0,ocrTotal=0;
   async function getOCR(page,total){
     if(ocr)return ocr;
     onProgress({message:'Подготавливаем распознавание сканов. Первый запуск загружает языковые модули…',page,total});
     const T=await bounded(loadTesseract(),60000,'Не удалось загрузить распознавание.',signal);
-    ocrPending=T.createWorker('rus+eng',1,{workerPath:asset('./vendor/tesseract/worker.min.js'),corePath:asset('./vendor/tesseract-core/'),langPath:asset('./vendor/tessdata'),workerBlobURL:false,cacheMethod:'none',logger:m=>{if(m.status==='recognizing text')onProgress({message:`Распознаём скан ${page} из ${total} · ${Math.round(m.progress*100)}%`,page,total});},errorHandler:()=>{}});
+    ocrPending=T.createWorker('rus+eng',1,{workerPath:asset('./vendor/tesseract/worker.min.js'),corePath:asset('./vendor/tesseract-core/'),langPath:asset('./vendor/tessdata'),workerBlobURL:false,cacheMethod:'none',logger:m=>{if(m.status==='recognizing text')onProgress({message:`Распознаём скан ${ocrPage} из ${ocrTotal} · ${Math.round(m.progress*100)}%`,page:ocrPage,total:ocrTotal});},errorHandler:()=>{}});
     let abandoned=false;ocrPending.then(w=>{if(stopped||abandoned)w.terminate().catch(()=>{});},()=>{});
     try{ocr=await bounded(ocrPending,120000,'Подготовка распознавания заняла больше двух минут. Повторите импорт.',signal);}catch(e){abandoned=true;throw e;}
     check(signal);await ocr.setParameters({preserve_interword_spaces:'1',user_defined_dpi:'200',tessedit_pageseg_mode:'3'});return ocr;
@@ -82,7 +82,7 @@ export async function readPDF(file,{onProgress=()=>{},signal,forceOCR=false}={})
     doc=await bounded(loadingTask.promise,45000,'Не удалось открыть PDF за 45 секунд.',signal);check(signal);
     if(doc.numPages>MAX_PAGES)throw Error('В PDF больше 100 страниц. Разделите документ на меньшие файлы для тестирования.');
     for(let n=1;n<=doc.numPages;n++){
-      check(signal);
+      ocrPage=n;ocrTotal=doc.numPages;check(signal);
       if(Date.now()-started>12*60*1000){for(let k=n;k<=doc.numPages;k++)pages.push({number:k,text:'',lines:[],status:'unprocessed',message:'Достигнут предел 12 минут на один документ.'});break;}
       onProgress({message:`Читаем страницу ${n} из ${doc.numPages}…`,page:n,total:doc.numPages});
       let page,canvas,lines=[],text='',status='text',message='';

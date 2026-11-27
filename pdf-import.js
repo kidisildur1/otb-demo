@@ -18,7 +18,7 @@
     if(!file){error='Выберите файл PDF.';c.render();return;}
     busy=true;error='';selectedName=file.name;controller=new AbortController();const current=controller;progress={message:'Подготавливаем файл…',page:0,total:0};c.render();
     try{
-      const {readPDF}=await import('./pdf-reader.mjs?v=20261127-pdf');
+      const {readPDF}=await import('./pdf-reader.mjs?v=20261127-pdf2');
       const result=await readPDF(file,{signal:current.signal,forceOCR,onProgress:value=>update(c,value)});
       if(current.signal.aborted)throw new DOMException('Отменено','AbortError');
       update(c,{message:'Собираем карточку, этапы и график платежей…',page:result.source.pageCount,total:result.source.pageCount});
